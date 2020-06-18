@@ -1,22 +1,60 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, ScrollView, Alert } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
+import * as SQLite from 'expo-sqlite';
+
+const db = SQLite.openDatabase('db.db');
 
 const Home = () => {
-  const [notes, setNotes] = useState<String[]>([]);
+  const [notes, setNotes] = useState<String[]>(["Oi"]);
   const [input, setInput] = useState('');
 
   function handleAddTodo() {
     if(notes.includes(input)) return;
+
+    db.transaction(tx => {
+      tx.executeSql(
+        "insert into notes (value) values (?);",
+        [input]
+      );
+    });
 
     setNotes(notes => [...notes, input]);
     setInput('');
   }
 
   function handleDeleteTodo(note: String) {
+    db.transaction(tx => {
+      tx.executeSql(
+        "delete from notes where value=?",
+        [note]
+      );
+    });
+
     setNotes(notes => notes.filter(item => item !== note));
   }
+
+  useEffect(() => {
+    db.transaction(tx => {
+      tx.executeSql(
+        "create table if not exists notes (id integer primary key not null, value text);"
+      );
+
+      tx.executeSql(
+        "create table if not exists points (id integer primary key not null, value integer);"
+      );
+
+      tx.executeSql(
+        "select value from notes;",
+        [],
+        (_, { rows: { _array } }) => {
+          const dbNotes = _array.map(item => item.value);
+          setNotes([...dbNotes]);
+        }
+      );
+    });
+  }, []);
 
   return(
     <View style={styles.container}>
