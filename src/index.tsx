@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, AsyncStorage } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import * as SQLite from 'expo-sqlite';
 
-const db = SQLite.openDatabase('db.db');
+const db = SQLite.openDatabase("db.db");
 
 const Home = () => {
-  const [notes, setNotes] = useState<String[]>(["Oi"]);
+  const [notes, setNotes] = useState<String[]>([]);
   const [input, setInput] = useState('');
+  const [points, setPoints] = useState(0);
 
-  function handleAddTodo() {
+  async function handleAddTodo() {
     if(notes.includes(input)) return;
+
+    setNotes(notes => [...notes, input]);
+    setPoints(points => points + 1);
+
+    const currentValue = await AsyncStorage.getItem("@TodoListPoints:points")
+    await AsyncStorage.setItem("@TodoListPoints:points", `${Number(currentValue) + 1}`);
 
     db.transaction(tx => {
       tx.executeSql(
@@ -20,29 +27,28 @@ const Home = () => {
       );
     });
 
-    setNotes(notes => [...notes, input]);
     setInput('');
   }
 
-  function handleDeleteTodo(note: String) {
+  async function handleDeleteTodo(note: String) {
+    setNotes(notes => notes.filter(item => item !== note));
+    setPoints(points => points + 2);
+
+    const currentValue = await AsyncStorage.getItem("@TodoListPoints:points")
+    await AsyncStorage.setItem("@TodoListPoints:points", `${Number(currentValue) + 2}`);
+
     db.transaction(tx => {
       tx.executeSql(
-        "delete from notes where value=?",
+        "delete from notes where value = ?;",
         [note]
       );
     });
-
-    setNotes(notes => notes.filter(item => item !== note));
   }
 
   useEffect(() => {
     db.transaction(tx => {
       tx.executeSql(
         "create table if not exists notes (id integer primary key not null, value text);"
-      );
-
-      tx.executeSql(
-        "create table if not exists points (id integer primary key not null, value integer);"
       );
 
       tx.executeSql(
@@ -54,6 +60,21 @@ const Home = () => {
         }
       );
     });
+  }, []);
+
+  useEffect(() => {
+    async function loadPoints() {
+      const value = await AsyncStorage.getItem("@TodoListPoints:points");
+      if (value === null) {
+        await AsyncStorage.setItem("@TodoListPoints:points", "0");
+        const initialValue = await AsyncStorage.getItem("@TodoListPoints:points");
+        setPoints(Number(initialValue));
+        return;
+      }
+      setPoints(Number(value));
+    }
+
+    loadPoints();
   }, []);
 
   return(
@@ -69,7 +90,10 @@ const Home = () => {
         </RectButton>
       </View>
 
-      <Text style={styles.title}>Todo List</Text>
+      <View style={styles.detailContainer}>
+        <Text style={styles.title}>Todo List</Text>
+        <Text style={styles.points}>Pontos: {points}</Text>
+      </View>
 
       <ScrollView style={styles.listItem}>
         {notes && notes.map(note => (
@@ -133,7 +157,6 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
     fontSize: 20,
-    marginTop: 40,
   },
 
   itemContainer: {
@@ -173,6 +196,19 @@ const styles = StyleSheet.create({
   },
 
   itemText: {
+    fontSize: 16,
+  },
+
+  detailContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 40,
+    paddingHorizontal: 20,
+  },
+
+  points: {
+    fontSize: 14,
   },
 });
 
